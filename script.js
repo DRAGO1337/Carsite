@@ -6,14 +6,37 @@ let partsDatabase = null;
 let selectedParts = [];
 let selectedCar = null;
 
-// Fetch car makes from API
+// Enhanced car data structure
+class Car {
+    constructor(make, model, year = 2023) {
+        this.make = make;
+        this.model = model;
+        this.year = year;
+        this.specs = {
+            horsepower: Math.floor(Math.random() * 400 + 100),
+            engineSize: ((Math.random() * 4 + 1.5).toFixed(1)) + 'L',
+            turbo: Math.random() > 0.5,
+            weight: Math.floor(Math.random() * 1000 + 1200) + ' kg'
+        };
+    }
+
+    getFullName() {
+        return `${this.year} ${this.make} ${this.model}`;
+    }
+}
+
+// Fetch and process car makes from API
 async function fetchCarMakes() {
     try {
+        document.querySelector('.main-content').innerHTML = '<div class="loading">Loading car database...</div>';
         const response = await fetch(`${API_BASE_URL}/getallmakes?format=json`);
         const data = await response.json();
-        return data.Results;
+        const processedCars = data.Results.map(make => new Car(make.Make_Name, 'Base Model'));
+        document.querySelector('.main-content').innerHTML = '<div id="selected-car-info"><h2>Select a car to view details</h2></div>';
+        return processedCars;
     } catch (error) {
         console.error('Error fetching car makes:', error);
+        document.querySelector('.main-content').innerHTML = '<div class="error">Error loading car database</div>';
         return [];
     }
 }
@@ -63,13 +86,34 @@ async function loadPartsDatabase() {
     };
 }
 
-// Search and filter cars
+// Search and filter cars with autocomplete
 function filterCars(searchTerm) {
     const lowerSearch = searchTerm.toLowerCase();
     return carDatabase.filter(car => 
-        car.Make_Name.toLowerCase().includes(lowerSearch) ||
-        car.Model_Name?.toLowerCase().includes(lowerSearch)
-    );
+        car.getFullName().toLowerCase().includes(lowerSearch)
+    ).slice(0, 10); // Limit to 10 suggestions
+}
+
+// Display car details
+function displayCarDetails(car) {
+    const detailsHtml = `
+        <h2>${car.getFullName()}</h2>
+        <div class="car-specs">
+            <div class="spec-item">
+                <strong>Horsepower:</strong> ${car.specs.horsepower} HP
+            </div>
+            <div class="spec-item">
+                <strong>Engine:</strong> ${car.specs.engineSize}
+            </div>
+            <div class="spec-item">
+                <strong>Turbo:</strong> ${car.specs.turbo ? 'Yes' : 'No'}
+            </div>
+            <div class="spec-item">
+                <strong>Weight:</strong> ${car.specs.weight}
+            </div>
+        </div>
+    `;
+    document.getElementById('selected-car-info').innerHTML = detailsHtml;
 }
 
 // Check part compatibility
@@ -134,18 +178,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 function updateCarList(cars) {
     const carList = document.querySelector('.car-list');
     carList.innerHTML = cars.map(car => `
-        <div class="car-item" data-make-id="${car.Make_ID}">
-            <h3>${car.Make_Name}</h3>
-            <p>Click to view models</p>
+        <div class="car-item">
+            <h3>${car.getFullName()}</h3>
         </div>
     `).join('');
     
     // Add click handlers for car selection
-    document.querySelectorAll('.car-item').forEach(car => {
-        car.addEventListener('click', async () => {
-            const makeId = car.dataset.makeId;
-            const models = await fetchCarModels(makeId);
-            displayCarModels(models);
+    document.querySelectorAll('.car-item').forEach((item, index) => {
+        item.addEventListener('click', () => {
+            selectedCar = cars[index];
+            displayCarDetails(selectedCar);
+            document.querySelectorAll('.car-item').forEach(i => i.classList.remove('selected'));
+            item.classList.add('selected');
         });
     });
 }
