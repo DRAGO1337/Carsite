@@ -25,13 +25,21 @@ class Car {
         try {
             const response = await fetch(`${API_BASE_URL}/GetVehicleTypesForMakeId/${this.manufacturerId}?format=json`);
             const data = await response.json();
-            const vehicleType = data.Results[0]?.VehicleTypeName;
+            const vehicleTypes = data.Results.map(r => r.VehicleTypeName.toUpperCase());
+            
+            // Check if it's a passenger vehicle
+            const isPassengerVehicle = vehicleTypes.some(type => 
+                type.includes('PASSENGER') || 
+                type.includes('CAR') || 
+                type.includes('MULTIPURPOSE PASSENGER VEHICLE (MPV)')
+            );
             
             this.specs = {
-                type: vehicleType || 'Unknown',
+                type: isPassengerVehicle ? 'Passenger Vehicle' : 'Other',
                 manufacturer: this.make,
                 model: this.model,
-                year: this.year
+                year: this.year,
+                isPassengerVehicle
             };
             
             return this.specs;
@@ -52,13 +60,16 @@ async function fetchCarMakes() {
         const makes = await fetch(`${API_BASE_URL}/getallmakes?format=json`);
         const makesData = await makes.json();
         
-        // Filter out non-car manufacturers
-        const carMakes = makesData.Results.filter(make => 
-            !make.Make_Name.includes('TRAILER') && 
-            !make.Make_Name.includes('EQUIPMENT') &&
-            !make.Make_Name.includes('MOPED') &&
-            !make.Make_Name.includes('MOTORCYCLE')
-        );
+        // Filter out non-passenger vehicle manufacturers
+        const excludeTerms = ['TRAILER', 'EQUIPMENT', 'MOPED', 'MOTORCYCLE', 'TRUCK', 'BUS', 'VAN', 
+            'COMMERCIAL', 'CONSTRUCTION', 'AGRICULTURE', 'INCOMPLETE VEHICLE'];
+            
+        const carMakes = makesData.Results.filter(make => {
+            const makeName = make.Make_Name.toUpperCase();
+            return !excludeTerms.some(term => makeName.includes(term)) &&
+                   !/^\d+$/.test(makeName) && // Exclude numeric-only names
+                   makeName.length > 1; // Exclude single-character names
+        });
         
         // Get models for each make (limited to 5 manufacturers for performance)
         const cars = [];
@@ -226,7 +237,8 @@ let currentPage = 0;
 function updateCarList(cars) {
     const carList = document.querySelector('.car-list');
     const startIndex = currentPage * CARS_PER_PAGE;
-    const displayedCars = cars.slice(startIndex, startIndex + CARS_PER_PAGE);
+    const validCars = cars.filter(car => car.specs?.isPassengerVehicle !== false);
+    const displayedCars = validCars.slice(startIndex, startIndex + CARS_PER_PAGE);
     
     carList.innerHTML = `
         ${displayedCars.map(car => `
