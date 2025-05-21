@@ -8,20 +8,37 @@ let selectedCar = null;
 
 // Enhanced car data structure
 class Car {
-    constructor(make, model, year = 2023) {
-        this.make = make;
-        this.model = model;
-        this.year = year;
-        this.specs = {
-            horsepower: Math.floor(Math.random() * 400 + 100),
-            engineSize: ((Math.random() * 4 + 1.5).toFixed(1)) + 'L',
-            turbo: Math.random() > 0.5,
-            weight: Math.floor(Math.random() * 1000 + 1200) + ' kg'
-        };
+    constructor(data) {
+        this.make = data.Make_Name;
+        this.model = data.Model_Name || '';
+        this.year = data.Model_Year || 2023;
+        this.manufacturerId = data.Make_ID;
+        this.modelId = data.Model_ID;
+        this.specs = null;
     }
 
     getFullName() {
-        return `${this.year} ${this.make} ${this.model}`;
+        return `${this.year} ${this.make} ${this.model}`.trim();
+    }
+
+    async loadSpecs() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/GetVehicleTypesForMakeId/${this.manufacturerId}?format=json`);
+            const data = await response.json();
+            const vehicleType = data.Results[0]?.VehicleTypeName;
+            
+            this.specs = {
+                type: vehicleType || 'Unknown',
+                manufacturer: this.make,
+                model: this.model,
+                year: this.year
+            };
+            
+            return this.specs;
+        } catch (error) {
+            console.error('Error loading vehicle specs:', error);
+            return null;
+        }
     }
 }
 
@@ -29,11 +46,39 @@ class Car {
 async function fetchCarMakes() {
     try {
         document.querySelector('.main-content').innerHTML = '<div class="loading">Loading car database...</div>';
-        const response = await fetch(`${API_BASE_URL}/getallmakes?format=json`);
-        const data = await response.json();
-        const processedCars = data.Results.map(make => new Car(make.Make_Name, 'Base Model'));
+        
+        // Fetch recent car makes (last 5 years)
+        const currentYear = new Date().getFullYear();
+        const makes = await fetch(`${API_BASE_URL}/getallmakes?format=json`);
+        const makesData = await makes.json();
+        
+        // Filter out non-car manufacturers
+        const carMakes = makesData.Results.filter(make => 
+            !make.Make_Name.includes('TRAILER') && 
+            !make.Make_Name.includes('EQUIPMENT') &&
+            !make.Make_Name.includes('MOPED') &&
+            !make.Make_Name.includes('MOTORCYCLE')
+        );
+        
+        // Get models for each make (limited to 5 manufacturers for performance)
+        const cars = [];
+        for (const make of carMakes.slice(0, 5)) {
+            const modelsResponse = await fetch(`${API_BASE_URL}/GetModelsForMakeId/${make.Make_ID}?format=json`);
+            const modelsData = await modelsResponse.json();
+            
+            modelsData.Results.forEach(model => {
+                cars.push(new Car({
+                    Make_ID: make.Make_ID,
+                    Make_Name: make.Make_Name,
+                    Model_ID: model.Model_ID,
+                    Model_Name: model.Model_Name,
+                    Model_Year: currentYear
+                }));
+            });
+        }
+        
         document.querySelector('.main-content').innerHTML = '<div id="selected-car-info"><h2>Select a car to view details</h2></div>';
-        return processedCars;
+        return cars;
     } catch (error) {
         console.error('Error fetching car makes:', error);
         document.querySelector('.main-content').innerHTML = '<div class="error">Error loading car database</div>';
@@ -175,22 +220,54 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // Update car list display
+const CARS_PER_PAGE = 10;
+let currentPage = 0;
+
 function updateCarList(cars) {
     const carList = document.querySelector('.car-list');
-    carList.innerHTML = cars.map(car => `
-        <div class="car-item">
-            <h3>${car.getFullName()}</h3>
+    const startIndex = currentPage * CARS_PER_PAGE;
+    const displayedCars = cars.slice(startIndex, startIndex + CARS_PER_PAGE);
+    
+    carList.innerHTML = `
+        ${displayedCars.map(car => `
+            <div class="car-item">
+                <h3>${car.getFullName()}</h3>
+            </div>
+        `).join('')}
+        <div class="pagination">
+            ${currentPage > 0 ? '<button class="prev-page">Previous</button>' : ''}
+            ${startIndex + CARS_PER_PAGE < cars.length ? '<button class="next-page">Next</button>' : ''}
         </div>
-    `).join('');
+    `;
     
     // Add click handlers for car selection
     document.querySelectorAll('.car-item').forEach((item, index) => {
-        item.addEventListener('click', () => {
-            selectedCar = cars[index];
-            displayCarDetails(selectedCar);
+        item.addEventListener('click', async () => {
+            const car = displayedCars[index];
+            selectedCar = car;
+            
             document.querySelectorAll('.car-item').forEach(i => i.classList.remove('selected'));
             item.classList.add('selected');
+            
+            // Load and display car specs
+            document.getElementById('selected-car-info').innerHTML = '<div class="loading">Loading car details...</div>';
+            await car.loadSpecs();
+            displayCarDetails(car);
         });
+    });
+    
+    // Add pagination handlers
+    const prevBtn = carList.querySelector('.prev-page');
+    const nextBtn = carList.querySelector('.next-page');
+    
+    if (prevBtn) prevBtn.addEventListener('click', () => {
+        currentPage--;
+        updateCarList(cars);
+    });
+    
+    if (nextBtn) nextBtn.addEventListener('click', () => {
+        currentPage++;
+        updateCarList(cars);
     });
 }
 
