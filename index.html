@@ -1,0 +1,62 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Car Tuning Builder</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar with car selection -->
+        <aside class="sidebar">
+            <h2>Select Car</h2>
+            <div class="car-list">
+                <div class="car-item" data-car="car1">
+                    <h3>Toyota Supra MK4</h3>
+                    <p>2JZ-GTE Engine</p>
+                </div>
+                <div class="car-item" data-car="car2">
+                    <h3>Nissan Skyline GT-R R34</h3>
+                    <p>RB26DETT Engine</p>
+                </div>
+                <div class="car-item" data-car="car3">
+                    <h3>Porsche 911 GT3</h3>
+                    <p>4.0L Flat-6</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main content area -->
+        <main class="main-content">
+            <!-- Car details section -->
+            <section class="car-details">
+                <h2>Car Details</h2>
+                <div id="selected-car-info"></div>
+            </section>
+
+            <!-- Parts categories -->
+            <div class="categories">
+                <button class="category-btn active" data-category="engine">Engine</button>
+                <button class="category-btn" data-category="suspension">Suspension</button>
+                <button class="category-btn" data-category="wheels">Wheels</button>
+                <button class="category-btn" data-category="bodywork">Bodywork</button>
+            </div>
+
+            <!-- Parts grid -->
+            <div class="parts-grid" id="parts-grid"></div>
+        </main>
+
+        <!-- Build list -->
+        <aside class="build-list">
+            <h2>Your Build</h2>
+            <div id="selected-parts"></div>
+            <div class="total-price">
+                <h3>Total: $<span id="total-price">0</span></h3>
+            </div>
+        </aside>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
