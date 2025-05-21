@@ -1,4 +1,3 @@
-
 // API and Data Management
 const API_BASE_URL = 'https://vpic.nhtsa.dot.gov/api/vehicles';
 let carDatabase = [];
@@ -25,23 +24,12 @@ class Car {
         try {
             const response = await fetch(`${API_BASE_URL}/GetVehicleTypesForMakeId/${this.manufacturerId}?format=json`);
             const data = await response.json();
-            const vehicleTypes = data.Results.map(r => r.VehicleTypeName.toUpperCase());
-            
-            // Check if it's a passenger vehicle
-            const isPassengerVehicle = vehicleTypes.some(type => 
-                type.includes('PASSENGER') || 
-                type.includes('CAR') || 
-                type.includes('MULTIPURPOSE PASSENGER VEHICLE (MPV)')
-            );
-            
             this.specs = {
-                type: isPassengerVehicle ? 'Passenger Vehicle' : 'Other',
+                type: data.Results[0]?.VehicleTypeName || 'Unknown',
                 manufacturer: this.make,
                 model: this.model,
-                year: this.year,
-                isPassengerVehicle
+                year: this.year
             };
-            
             return this.specs;
         } catch (error) {
             console.error('Error loading vehicle specs:', error);
@@ -54,29 +42,26 @@ class Car {
 async function fetchCarMakes() {
     try {
         document.querySelector('.main-content').innerHTML = '<div class="loading">Loading car database...</div>';
-        
+
         // Fetch recent car makes (last 5 years)
         const currentYear = new Date().getFullYear();
         const makes = await fetch(`${API_BASE_URL}/getallmakes?format=json`);
         const makesData = await makes.json();
-        
-        // Filter out non-passenger vehicle manufacturers
-        const excludeTerms = ['TRAILER', 'EQUIPMENT', 'MOPED', 'MOTORCYCLE', 'TRUCK', 'BUS', 'VAN', 
-            'COMMERCIAL', 'CONSTRUCTION', 'AGRICULTURE', 'INCOMPLETE VEHICLE'];
-            
-        const carMakes = makesData.Results.filter(make => {
-            const makeName = make.Make_Name.toUpperCase();
-            return !excludeTerms.some(term => makeName.includes(term)) &&
-                   !/^\d+$/.test(makeName) && // Exclude numeric-only names
-                   makeName.length > 1; // Exclude single-character names
-        });
-        
+
+        // Filter out non-car manufacturers
+        const carMakes = makesData.Results.filter(make => 
+            !make.Make_Name.includes('TRAILER') && 
+            !make.Make_Name.includes('EQUIPMENT') &&
+            !make.Make_Name.includes('MOPED') &&
+            !make.Make_Name.includes('MOTORCYCLE')
+        );
+
         // Get models for each make (limited to 5 manufacturers for performance)
         const cars = [];
         for (const make of carMakes.slice(0, 5)) {
             const modelsResponse = await fetch(`${API_BASE_URL}/GetModelsForMakeId/${make.Make_ID}?format=json`);
             const modelsData = await modelsResponse.json();
-            
+
             modelsData.Results.forEach(model => {
                 cars.push(new Car({
                     Make_ID: make.Make_ID,
@@ -87,7 +72,7 @@ async function fetchCarMakes() {
                 }));
             });
         }
-        
+
         document.querySelector('.main-content').innerHTML = '<div id="selected-car-info"><h2>Select a car to view details</h2></div>';
         return cars;
     } catch (error) {
@@ -123,8 +108,7 @@ async function loadPartsDatabase() {
                     yearRange: [1990, 2024],
                     requiresTurbo: false
                 }
-            },
-            // ... more parts with compatibility data
+            }
         ],
         suspension: [
             {
@@ -136,9 +120,7 @@ async function loadPartsDatabase() {
                     yearRange: [1990, 2024]
                 }
             }
-            // ... more parts
-        ],
-        // ... other categories
+        ]
     };
 }
 
@@ -156,16 +138,16 @@ function displayCarDetails(car) {
         <h2>${car.getFullName()}</h2>
         <div class="car-specs">
             <div class="spec-item">
-                <strong>Horsepower:</strong> ${car.specs.horsepower} HP
+                <strong>Type:</strong> ${car.specs.type}
             </div>
             <div class="spec-item">
-                <strong>Engine:</strong> ${car.specs.engineSize}
+                <strong>Make:</strong> ${car.specs.manufacturer}
             </div>
             <div class="spec-item">
-                <strong>Turbo:</strong> ${car.specs.turbo ? 'Yes' : 'No'}
+                <strong>Model:</strong> ${car.specs.model}
             </div>
             <div class="spec-item">
-                <strong>Weight:</strong> ${car.specs.weight}
+                <strong>Year:</strong> ${car.specs.year}
             </div>
         </div>
     `;
@@ -175,17 +157,17 @@ function displayCarDetails(car) {
 // Check part compatibility
 function isPartCompatible(part, car) {
     if (!part.compatibility) return true;
-    
+
     const meetsEngineReq = !part.compatibility.engineTypes || 
         part.compatibility.engineTypes.includes(car.engineType);
-    
+
     const meetsYearReq = !part.compatibility.yearRange ||
         (car.year >= part.compatibility.yearRange[0] && 
          car.year <= part.compatibility.yearRange[1]);
-    
+
     const meetsTurboReq = !part.compatibility.requiresTurbo ||
         part.compatibility.requiresTurbo === car.turbo;
-    
+
     return meetsEngineReq && meetsYearReq && meetsTurboReq;
 }
 
@@ -194,28 +176,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         // Show loading state
         document.querySelector('.main-content').innerHTML = '<div class="loading">Loading car database...</div>';
-        
+
         // Load initial data
         const makes = await fetchCarMakes();
         carDatabase = makes;
         partsDatabase = await loadPartsDatabase();
-        
+
         // Setup search input
-        const searchInput = document.createElement('input');
-        searchInput.type = 'text';
-        searchInput.className = 'car-search';
-        searchInput.placeholder = 'Search cars...';
-        document.querySelector('.sidebar').insertBefore(searchInput, document.querySelector('.car-list'));
-        
-        // Setup search handler
+        const searchInput = document.querySelector('.car-search');
         searchInput.addEventListener('input', (e) => {
             const filtered = filterCars(e.target.value);
             updateCarList(filtered);
         });
-        
+
         // Initial car list render
         updateCarList(makes);
-        
+
         // Setup category handlers
         document.querySelectorAll('.category-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -237,9 +213,8 @@ let currentPage = 0;
 function updateCarList(cars) {
     const carList = document.querySelector('.car-list');
     const startIndex = currentPage * CARS_PER_PAGE;
-    const validCars = cars.filter(car => car.specs?.isPassengerVehicle !== false);
-    const displayedCars = validCars.slice(startIndex, startIndex + CARS_PER_PAGE);
-    
+    const displayedCars = cars.slice(startIndex, startIndex + CARS_PER_PAGE);
+
     carList.innerHTML = `
         ${displayedCars.map(car => `
             <div class="car-item">
@@ -251,52 +226,36 @@ function updateCarList(cars) {
             ${startIndex + CARS_PER_PAGE < cars.length ? '<button class="next-page">Next</button>' : ''}
         </div>
     `;
-    
+
     // Add click handlers for car selection
     document.querySelectorAll('.car-item').forEach((item, index) => {
         item.addEventListener('click', async () => {
             const car = displayedCars[index];
             selectedCar = car;
-            
+
             document.querySelectorAll('.car-item').forEach(i => i.classList.remove('selected'));
             item.classList.add('selected');
-            
+
             // Load and display car specs
             document.getElementById('selected-car-info').innerHTML = '<div class="loading">Loading car details...</div>';
             await car.loadSpecs();
             displayCarDetails(car);
         });
     });
-    
+
     // Add pagination handlers
     const prevBtn = carList.querySelector('.prev-page');
     const nextBtn = carList.querySelector('.next-page');
-    
+
     if (prevBtn) prevBtn.addEventListener('click', () => {
         currentPage--;
         updateCarList(cars);
     });
-    
+
     if (nextBtn) nextBtn.addEventListener('click', () => {
         currentPage++;
         updateCarList(cars);
     });
-}
-
-// Display car models
-function displayCarModels(models) {
-    const carInfo = document.getElementById('selected-car-info');
-    carInfo.innerHTML = `
-        <h3>Available Models</h3>
-        <div class="models-grid">
-            ${models.map(model => `
-                <div class="model-card">
-                    <h4>${model.Model_Name}</h4>
-                    <button onclick="selectCarModel(${JSON.stringify(model)})">Select</button>
-                </div>
-            `).join('')}
-        </div>
-    `;
 }
 
 // Display compatible parts
@@ -305,10 +264,10 @@ function displayCompatibleParts(category) {
         document.getElementById('parts-grid').innerHTML = '<div class="notice">Please select a car first</div>';
         return;
     }
-    
+
     const parts = partsDatabase[category].filter(part => isPartCompatible(part, selectedCar));
     const grid = document.getElementById('parts-grid');
-    
+
     grid.innerHTML = parts.map(part => `
         <div class="part-card">
             <h3>${part.name}</h3>
@@ -330,7 +289,7 @@ function addToBuild(category, partName, price) {
 function updateBuildList() {
     const buildList = document.getElementById('selected-parts');
     const totalPriceElement = document.getElementById('total-price');
-    
+
     buildList.innerHTML = selectedParts.map(part => `
         <div class="selected-part">
             <p><strong>${part.name}</strong></p>
@@ -338,7 +297,7 @@ function updateBuildList() {
             <button onclick="removePart('${part.name}')" class="remove-btn">Remove</button>
         </div>
     `).join('');
-    
+
     const total = selectedParts.reduce((sum, part) => sum + part.price, 0);
     totalPriceElement.textContent = total;
 }
